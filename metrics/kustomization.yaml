@@ -7,12 +7,12 @@ patches:
       kind: ClusterRole
       name: rook-ceph-system
     patch: |-
-      op: add
-      path: /rules/-
-      value:
-        apiGroups: ["monitoring.coreos.com"]
-        resources: ["servicemonitors"]
-        verbs: ["get"]
+      - op: add
+        path: /rules/-
+        value:
+          apiGroups: ["monitoring.coreos.com"]
+          resources: ["servicemonitors"]
+          verbs: ["get"]
 configMapGenerator:
   - name: rook-ceph-operator-config
     behavior: merge
