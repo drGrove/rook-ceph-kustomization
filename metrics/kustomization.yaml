@@ -12,7 +12,7 @@ patches:
         value:
           apiGroups: ["monitoring.coreos.com"]
           resources: ["servicemonitors"]
-          verbs: ["get", "list", "watch", "create", "delete", "patch"]
+          verbs: ["get", "list", "watch", "update", "create", "delete", "patch", "deletecollection"]
 configMapGenerator:
   - name: rook-ceph-operator-config
     behavior: merge
