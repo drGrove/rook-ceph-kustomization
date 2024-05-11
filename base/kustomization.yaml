@@ -4,3 +4,6 @@ resources:
   - crds.yaml
   - common.yaml
   - operator.yaml
+images:
+  - name: rook/ceph
+    newTag: v1.14.3@sha256:cf8d2525aa9d13a17dda3ca05b5220d157705b3840ff8f03d882cf791e610fc7
