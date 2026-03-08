@@ -13,8 +13,3 @@ patches:
           apiGroups: ["monitoring.coreos.com"]
           resources: ["servicemonitors"]
           verbs: ["get", "list", "watch", "update", "create", "delete", "patch", "deletecollection"]
-configMapGenerator:
-  - name: rook-ceph-operator-config
-    behavior: merge
-    literals:
-      - ROOK_CSI_ENABLE_GRPC_METRICS="true"

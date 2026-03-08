@@ -6,4 +6,4 @@ resources:
   - operator.yaml
 images:
   - name: rook/ceph
-    newTag: v1.14.3@sha256:cf8d2525aa9d13a17dda3ca05b5220d157705b3840ff8f03d882cf791e610fc7
+    newTag: v1.19.2@sha256:944a1dd704968cfe8141598cd8df4f30ade304414e170b61c711298f9c9bb9a2
