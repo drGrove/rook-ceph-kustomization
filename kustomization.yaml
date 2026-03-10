@@ -4,5 +4,5 @@ resources:
   - ./crds
   - ./csi-operator
   - ./operator
-components:
-  - ./metrics
+# components:
+#   - ./metrics
