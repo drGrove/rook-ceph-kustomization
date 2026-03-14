@@ -52,4 +52,4 @@ configMapGenerator:
       - ROOK_CUSTOM_HOSTNAME_LABEL=
 images:
   - name: rook/ceph
-    newTag: v1.19.2@sha256:944a1dd704968cfe8141598cd8df4f30ade304414e170b61c711298f9c9bb9a2
+    newTag: v1.19.2@sha256:944a1dd704968cfe8144598cd8df4f30ade304414e170b61c711298f9c9bb9a2
