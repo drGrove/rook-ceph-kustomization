@@ -659,6 +659,13 @@ spec:
                             Generation `0` indicates that keys existed prior to the implementation of key tracking.
                           format: int32
                           type: integer
+                        keyType:
+                          description: |-
+                            KeyType identifies the CephX key type for the current generation's keys, if known.
+                            If unknown, the value will be empty.
+                          maxLength: 7
+                          minLength: 3
+                          type: string
                       type: object
                   type: object
                 conditions:
@@ -805,6 +812,22 @@ spec:
                               This is the number of OSDs that can be lost simultaneously before data cannot be recovered.
                             minimum: 0
                             type: integer
+                          crushNumFailureDomains:
+                            description: |-
+                              Number of failure domains to use for erasure coded chunk placement.
+                              When specified along with crushOSDsPerFailureDomain, a CRUSH MSR rule will be created
+                              that distributes chunks across this many failure domains.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          crushOSDsPerFailureDomain:
+                            description: |-
+                              Number of OSDs allowed per failure domain for erasure coded chunk placement.
+                              When specified along with crushNumFailureDomains, a CRUSH MSR rule will be created
+                              that allows up to this many chunks on OSDs within each failure domain.
+                            format: int32
+                            minimum: 1
+                            type: integer
                           dataChunks:
                             description: |-
                               Number of data chunks per object in an erasure coded storage pool (required for erasure-coded pool type).
@@ -812,10 +835,28 @@ spec:
                               as dataChunks so be aware that the larger the number of data chunks, the higher the cost of recovery.
                             minimum: 0
                             type: integer
+                          stripeUnit:
+                            anyOf:
+                              - type: integer
+                              - type: string
+                            description: |-
+                              Erasure code stripe size in bytes. Ceph default is 4096 bytes (4 KiB).
+                              Value must be a multiple of 4096 (4Ki).
+                            enum:
+                              - 4Ki
+                              - 16Ki
+                              - 64Ki
+                              - 256Ki
+                              - 1Mi
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
                         required:
                           - codingChunks
                           - dataChunks
                         type: object
+                        x-kubernetes-validations:
+                          - message: crushNumFailureDomains and crushOSDsPerFailureDomain must be specified together
+                            rule: has(self.crushNumFailureDomains) == has(self.crushOSDsPerFailureDomain)
                       failureDomain:
                         description: 'The failure domain: osd/host/(region or zone if available) - technically also any type in the crush map'
                         type: string
@@ -1000,6 +1041,22 @@ spec:
                             This is the number of OSDs that can be lost simultaneously before data cannot be recovered.
                           minimum: 0
                           type: integer
+                        crushNumFailureDomains:
+                          description: |-
+                            Number of failure domains to use for erasure coded chunk placement.
+                            When specified along with crushOSDsPerFailureDomain, a CRUSH MSR rule will be created
+                            that distributes chunks across this many failure domains.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        crushOSDsPerFailureDomain:
+                          description: |-
+                            Number of OSDs allowed per failure domain for erasure coded chunk placement.
+                            When specified along with crushNumFailureDomains, a CRUSH MSR rule will be created
+                            that allows up to this many chunks on OSDs within each failure domain.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         dataChunks:
                           description: |-
                             Number of data chunks per object in an erasure coded storage pool (required for erasure-coded pool type).
@@ -1007,10 +1064,28 @@ spec:
                             as dataChunks so be aware that the larger the number of data chunks, the higher the cost of recovery.
                           minimum: 0
                           type: integer
+                        stripeUnit:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            Erasure code stripe size in bytes. Ceph default is 4096 bytes (4 KiB).
+                            Value must be a multiple of 4096 (4Ki).
+                          enum:
+                            - 4Ki
+                            - 16Ki
+                            - 64Ki
+                            - 256Ki
+                            - 1Mi
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                       required:
                         - codingChunks
                         - dataChunks
                       type: object
+                      x-kubernetes-validations:
+                        - message: crushNumFailureDomains and crushOSDsPerFailureDomain must be specified together
+                          rule: has(self.crushNumFailureDomains) == has(self.crushOSDsPerFailureDomain)
                     failureDomain:
                       description: 'The failure domain: osd/host/(region or zone if available) - technically also any type in the crush map'
                       type: string
@@ -2160,6 +2235,13 @@ spec:
                             Generation `0` indicates that keys existed prior to the implementation of key tracking.
                           format: int32
                           type: integer
+                        keyType:
+                          description: |-
+                            KeyType identifies the CephX key type for the current generation's keys, if known.
+                            If unknown, the value will be empty.
+                          maxLength: 7
+                          minLength: 3
+                          type: string
                       type: object
                   type: object
                 conditions:
@@ -2196,7 +2278,7 @@ spec:
                     daemonsStatus:
                       description: PoolMirroringStatus is the mirroring status of a filesystem
                       items:
-                        description: FilesystemMirrorInfoSpec is the filesystem mirror status of a given filesystem
+                        description: FilesystemMirroringInfo is the filesystem mirror status of a given filesystem
                         properties:
                           daemon_id:
                             description: DaemonID is the cephfs-mirror name
@@ -2257,10 +2339,10 @@ spec:
                       description: Details contains potential status errors
                       type: string
                     lastChanged:
-                      description: LastChanged is the last time time the status last changed
+                      description: LastChanged is the last time the status last changed
                       type: string
                     lastChecked:
-                      description: LastChecked is the last time time the status was checked
+                      description: LastChecked is the last time the status was checked
                       type: string
                   type: object
                 observedGeneration:
@@ -2277,10 +2359,10 @@ spec:
                       description: Details contains potential status errors
                       type: string
                     lastChanged:
-                      description: LastChanged is the last time time the status last changed
+                      description: LastChanged is the last time the status last changed
                       type: string
                     lastChecked:
-                      description: LastChecked is the last time time the status was checked
+                      description: LastChecked is the last time the status was checked
                       type: string
                     snapshotSchedules:
                       description: SnapshotSchedules is the list of snapshots scheduled
@@ -2415,6 +2497,16 @@ spec:
                   type: string
                   x-kubernetes-validations:
                     - message: ClusterID is immutable
+                      rule: self == oldSelf
+                csiMetadataRadosNamespace:
+                  description: |-
+                    The RADOS namespace ceph-csi uses for additional metadata it stores in the metadata pool of the CephFS.
+                    If not specified the default of the ceph-csi driver is used.
+                  maxLength: 1024
+                  minLength: 1
+                  type: string
+                  x-kubernetes-validations:
+                    - message: CSIMetadataRadosNamespace is immutable
                       rule: self == oldSelf
                 dataPoolName:
                   description: The data pool name for the Ceph Filesystem subvolume group layout, if the default CephFS pool is not desired.

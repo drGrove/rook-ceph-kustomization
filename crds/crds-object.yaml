@@ -51,7 +51,7 @@ spec:
                   description: List of events that should trigger the notification
                   items:
                     description: |-
-                      BucketNotificationSpec represent the event type of the bucket notification
+                      BucketNotificationEvent represent the event type of the bucket notification
                       See: https://docs.ceph.com/en/latest/radosgw/s3-notification-compatibility/#event-types
                     enum:
                       - s3:ObjectCreated:*
@@ -250,10 +250,14 @@ spec:
                       properties:
                         ackLevel:
                           default: broker
-                          description: The ack level required for this topic (none/broker/routeable)
+                          description: |-
+                            The ack level required for this topic (none/broker/routable). The misspelled value
+                            "routeable" is deprecated, is sent to the RGW as "routable", and will be removed in a
+                            future release.
                           enum:
                             - none
                             - broker
+                            - routable
                             - routeable
                           type: string
                         disableVerifySSL:
@@ -1166,6 +1170,127 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
+  name: cephobjectstoreaccounts.ceph.rook.io
+spec:
+  group: ceph.rook.io
+  names:
+    kind: CephObjectStoreAccount
+    listKind: CephObjectStoreAccountList
+    plural: cephobjectstoreaccounts
+    singular: cephobjectstoreaccount
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - jsonPath: .status.phase
+          name: Phase
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1
+      schema:
+        openAPIV3Schema:
+          description: CephObjectStoreAccount represent the RGW user account
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: ObjectStoreAccountSpec represent the spec of a RGW Account
+              properties:
+                accountID:
+                  description: |-
+                    AccountID uniquely identifies an account and resource ownership. Format should be RGW followed by 17 digits
+                    (e.g., RGW00889737169837717). If not specified, the ID will be automatically generated.
+                  maxLength: 20
+                  minLength: 20
+                  pattern: ^RGW\d{17}$
+                  type: string
+                  x-kubernetes-validations:
+                    - message: accountID is immutable
+                      rule: self == oldSelf
+                name:
+                  description: Name is the desired display name of the RGW account if different from the CephObjectStoreAccount CR name.
+                  maxLength: 2048
+                  minLength: 1
+                  pattern: ^[a-zA-Z0-9 ._-]+$
+                  type: string
+                rootUser:
+                  description: |-
+                    RootUser configures the root user for the account. The root user is created by default
+                    and has default permissions across all account resources.
+                  properties:
+                    displayName:
+                      description: DisplayName for the root user
+                      maxLength: 64
+                      minLength: 1
+                      pattern: ^[\w+=,.@-]+$
+                      type: string
+                    skipCreate:
+                      description: |-
+                        SkipCreate when set to true, the root user will not be created for this account.
+                        This can be useful if the user wants to manually manage the root user outside of Rook.
+                      type: boolean
+                  type: object
+                store:
+                  description: Store is the CephObjectStore the account will be associated with
+                  maxLength: 253
+                  minLength: 1
+                  type: string
+                  x-kubernetes-validations:
+                    - message: store is immutable
+                      rule: self == oldSelf
+              required:
+                - store
+              type: object
+            status:
+              description: ObjectStoreAccountStatus represents the status of a CephObjectStoreAccount resource
+              properties:
+                accountID:
+                  description: AccountID associated with the RGW user account
+                  maxLength: 20
+                  minLength: 20
+                  type: string
+                observedGeneration:
+                  description: ObservedGeneration is the latest generation observed by the controller.
+                  format: int64
+                  type: integer
+                phase:
+                  type: string
+                rootAccountSecretName:
+                  description: RootAccountSecretName is the name of the Kubernetes secret containing the root user's access credentials
+                  maxLength: 253
+                  minLength: 1
+                  type: string
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: cephobjectstores.ceph.rook.io
 spec:
   group: ceph.rook.io
@@ -1314,6 +1439,22 @@ spec:
                             This is the number of OSDs that can be lost simultaneously before data cannot be recovered.
                           minimum: 0
                           type: integer
+                        crushNumFailureDomains:
+                          description: |-
+                            Number of failure domains to use for erasure coded chunk placement.
+                            When specified along with crushOSDsPerFailureDomain, a CRUSH MSR rule will be created
+                            that distributes chunks across this many failure domains.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        crushOSDsPerFailureDomain:
+                          description: |-
+                            Number of OSDs allowed per failure domain for erasure coded chunk placement.
+                            When specified along with crushNumFailureDomains, a CRUSH MSR rule will be created
+                            that allows up to this many chunks on OSDs within each failure domain.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         dataChunks:
                           description: |-
                             Number of data chunks per object in an erasure coded storage pool (required for erasure-coded pool type).
@@ -1321,10 +1462,28 @@ spec:
                             as dataChunks so be aware that the larger the number of data chunks, the higher the cost of recovery.
                           minimum: 0
                           type: integer
+                        stripeUnit:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            Erasure code stripe size in bytes. Ceph default is 4096 bytes (4 KiB).
+                            Value must be a multiple of 4096 (4Ki).
+                          enum:
+                            - 4Ki
+                            - 16Ki
+                            - 64Ki
+                            - 256Ki
+                            - 1Mi
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                       required:
                         - codingChunks
                         - dataChunks
                       type: object
+                      x-kubernetes-validations:
+                        - message: crushNumFailureDomains and crushOSDsPerFailureDomain must be specified together
+                          rule: has(self.crushNumFailureDomains) == has(self.crushOSDsPerFailureDomain)
                     failureDomain:
                       description: 'The failure domain: osd/host/(region or zone if available) - technically also any type in the crush map'
                       type: string
@@ -2544,6 +2703,11 @@ spec:
                             nullable
                             optional
                           type: object
+                        labels:
+                          additionalProperties:
+                            type: string
+                          description: The labels-related configuration to add/set on each rgw service.
+                          type: object
                       type: object
                     sslCertificateRef:
                       description: The name of the secret that stores the ssl certificate for secure rgw connections
@@ -2951,6 +3115,22 @@ spec:
                             This is the number of OSDs that can be lost simultaneously before data cannot be recovered.
                           minimum: 0
                           type: integer
+                        crushNumFailureDomains:
+                          description: |-
+                            Number of failure domains to use for erasure coded chunk placement.
+                            When specified along with crushOSDsPerFailureDomain, a CRUSH MSR rule will be created
+                            that distributes chunks across this many failure domains.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        crushOSDsPerFailureDomain:
+                          description: |-
+                            Number of OSDs allowed per failure domain for erasure coded chunk placement.
+                            When specified along with crushNumFailureDomains, a CRUSH MSR rule will be created
+                            that allows up to this many chunks on OSDs within each failure domain.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         dataChunks:
                           description: |-
                             Number of data chunks per object in an erasure coded storage pool (required for erasure-coded pool type).
@@ -2958,10 +3138,28 @@ spec:
                             as dataChunks so be aware that the larger the number of data chunks, the higher the cost of recovery.
                           minimum: 0
                           type: integer
+                        stripeUnit:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            Erasure code stripe size in bytes. Ceph default is 4096 bytes (4 KiB).
+                            Value must be a multiple of 4096 (4Ki).
+                          enum:
+                            - 4Ki
+                            - 16Ki
+                            - 64Ki
+                            - 256Ki
+                            - 1Mi
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                       required:
                         - codingChunks
                         - dataChunks
                       type: object
+                      x-kubernetes-validations:
+                        - message: crushNumFailureDomains and crushOSDsPerFailureDomain must be specified together
+                          rule: has(self.crushNumFailureDomains) == has(self.crushOSDsPerFailureDomain)
                     failureDomain:
                       description: 'The failure domain: osd/host/(region or zone if available) - technically also any type in the crush map'
                       type: string
@@ -3151,6 +3349,26 @@ spec:
                   description: Security represents security settings
                   nullable: true
                   properties:
+                    cipherSuites:
+                      description: |-
+                        CipherSuites specifies the cipher suites used during the TLS handshake for TLS v1.3.
+                        Each value must be a valid OpenSSL cipher suite name.
+                        See https://docs.openssl.org/master/man1/openssl-ciphers/
+                      items:
+                        type: string
+                      maxItems: 1000
+                      minItems: 0
+                      type: array
+                    ciphers:
+                      description: |-
+                        Ciphers specifies the cipher suites used during the TLS handshake for TLS v1.2 and below.
+                        Each value must be a valid OpenSSL cipher suite name.
+                        See https://docs.openssl.org/master/man1/openssl-ciphers/
+                      items:
+                        type: string
+                      maxItems: 1000
+                      minItems: 0
+                      type: array
                     keyRotation:
                       description: KeyRotation defines options for Key Rotation.
                       nullable: true
@@ -3193,6 +3411,46 @@ spec:
                           description: TokenSecretName is the kubernetes secret containing the KMS token
                           type: string
                       type: object
+                    sslOptions:
+                      description: |-
+                        SslOptions sets the SSL context options for the Ceph RGW beast frontend.
+                        See https://docs.ceph.com/en/latest/radosgw/frontends/#options
+                      properties:
+                        defaultWorkarounds:
+                          description: defaultWorkarounds implements various bug workaround when true, or disables it when false. Default disabled.
+                          type: boolean
+                        noCompression:
+                          description: noCompression disables compression when true, or disables it when false. Default disabled.
+                          type: boolean
+                        singleDiffieHellmanUse:
+                          description: SingleDiffieHellmanUse always creates a new key when using tmp_dh parameters when true, or disables it when false. Default disabled.
+                          type: boolean
+                        sslv2:
+                          description: sslv2 enables SSL v2 when true, or disables it when false. Default disabled.
+                          type: boolean
+                        sslv3:
+                          description: sslv3 enables SSL v3 when true, or disables it when false. Default disabled.
+                          type: boolean
+                        tlsv1_0:
+                          description: tlsv1_0 enables TLS v1.0 when true, or disables it when false. Default disabled.
+                          type: boolean
+                        tlsv1_1:
+                          description: tlsv1_1 enables TLS v1.1 when true, or disables it when false. Default disabled.
+                          type: boolean
+                        tlsv1_2:
+                          description: tlsv1_2 enables TLS v1.2 when true, or disables it when false. Default enabled.
+                          type: boolean
+                      type: object
+                    tlsGroups:
+                      description: |-
+                        TlsGroups specifies one or more TLS Group strings separated by colons.
+                        Multiple suites are supported with ':' colon-separated.
+                        The pseudo group name DEFAULT can be used to select the OpenSSL built-in default list of groups.
+                        Other valid group names will depend on OpenSSL version
+                        See https://docs.openssl.org/master/man3/SSL_CTX_set1_curves/#description
+                      items:
+                        type: string
+                      type: array
                   type: object
                 sharedPools:
                   description: The pool information when configuring RADOS namespaces in existing pools.
@@ -3227,9 +3485,12 @@ spec:
                             description: |-
                               The data pool used to store ObjectStore data that cannot use erasure coding (ex: multi-part uploads).
                               If dataPoolName is not erasure coded, then there is no need for dataNonECPoolName.
+                              WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                             type: string
                           dataPoolName:
-                            description: The data pool used to store ObjectStore objects data.
+                            description: |-
+                              The data pool used to store ObjectStore objects data.
+                              WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                             minLength: 1
                             type: string
                           default:
@@ -3238,7 +3499,9 @@ spec:
                               Default is false.
                             type: boolean
                           metadataPoolName:
-                            description: The metadata pool used to store ObjectStore bucket index.
+                            description: |-
+                              The metadata pool used to store ObjectStore bucket index.
+                              WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                             minLength: 1
                             type: string
                           name:
@@ -3254,7 +3517,9 @@ spec:
                             items:
                               properties:
                                 dataPoolName:
-                                  description: DataPoolName is the data pool used to store ObjectStore objects data.
+                                  description: |-
+                                    DataPoolName is the data pool used to store ObjectStore objects data.
+                                    WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                                   minLength: 1
                                   type: string
                                 name:
@@ -3271,6 +3536,7 @@ spec:
                                 - dataPoolName
                                 - name
                               type: object
+                            maxItems: 10
                             type: array
                         required:
                           - dataPoolName
@@ -3322,6 +3588,13 @@ spec:
                             Generation `0` indicates that keys existed prior to the implementation of key tracking.
                           format: int32
                           type: integer
+                        keyType:
+                          description: |-
+                            KeyType identifies the CephX key type for the current generation's keys, if known.
+                            If unknown, the value will be empty.
+                          maxLength: 7
+                          minLength: 3
+                          type: string
                       type: object
                   type: object
                 conditions:
@@ -3444,6 +3717,25 @@ spec:
             spec:
               description: ObjectStoreUserSpec represent the spec of an Objectstoreuser
               properties:
+                accountRef:
+                  description: |-
+                    AccountRef is a reference to a CephObjectStoreAccount to associate this user with.
+                    The referenced account must be in the same namespace as the user.
+                    When set, the user is created as an account user with no default permissions,
+                    and resources created by this user are owned by the account.
+                  properties:
+                    name:
+                      description: Name of the CephObjectStoreAccount CR
+                      maxLength: 2048
+                      minLength: 1
+                      pattern: ^[a-zA-Z0-9 ._-]+$
+                      type: string
+                  required:
+                    - name
+                  type: object
+                  x-kubernetes-validations:
+                    - message: accountRef is immutable
+                      rule: self == oldSelf
                 capabilities:
                   description: Additional admin-level capabilities for the Ceph object store user
                   nullable: true
@@ -3939,6 +4231,22 @@ spec:
                             This is the number of OSDs that can be lost simultaneously before data cannot be recovered.
                           minimum: 0
                           type: integer
+                        crushNumFailureDomains:
+                          description: |-
+                            Number of failure domains to use for erasure coded chunk placement.
+                            When specified along with crushOSDsPerFailureDomain, a CRUSH MSR rule will be created
+                            that distributes chunks across this many failure domains.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        crushOSDsPerFailureDomain:
+                          description: |-
+                            Number of OSDs allowed per failure domain for erasure coded chunk placement.
+                            When specified along with crushNumFailureDomains, a CRUSH MSR rule will be created
+                            that allows up to this many chunks on OSDs within each failure domain.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         dataChunks:
                           description: |-
                             Number of data chunks per object in an erasure coded storage pool (required for erasure-coded pool type).
@@ -3946,10 +4254,28 @@ spec:
                             as dataChunks so be aware that the larger the number of data chunks, the higher the cost of recovery.
                           minimum: 0
                           type: integer
+                        stripeUnit:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            Erasure code stripe size in bytes. Ceph default is 4096 bytes (4 KiB).
+                            Value must be a multiple of 4096 (4Ki).
+                          enum:
+                            - 4Ki
+                            - 16Ki
+                            - 64Ki
+                            - 256Ki
+                            - 1Mi
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                       required:
                         - codingChunks
                         - dataChunks
                       type: object
+                      x-kubernetes-validations:
+                        - message: crushNumFailureDomains and crushOSDsPerFailureDomain must be specified together
+                          rule: has(self.crushNumFailureDomains) == has(self.crushOSDsPerFailureDomain)
                     failureDomain:
                       description: 'The failure domain: osd/host/(region or zone if available) - technically also any type in the crush map'
                       type: string
@@ -4129,6 +4455,22 @@ spec:
                             This is the number of OSDs that can be lost simultaneously before data cannot be recovered.
                           minimum: 0
                           type: integer
+                        crushNumFailureDomains:
+                          description: |-
+                            Number of failure domains to use for erasure coded chunk placement.
+                            When specified along with crushOSDsPerFailureDomain, a CRUSH MSR rule will be created
+                            that distributes chunks across this many failure domains.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        crushOSDsPerFailureDomain:
+                          description: |-
+                            Number of OSDs allowed per failure domain for erasure coded chunk placement.
+                            When specified along with crushNumFailureDomains, a CRUSH MSR rule will be created
+                            that allows up to this many chunks on OSDs within each failure domain.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         dataChunks:
                           description: |-
                             Number of data chunks per object in an erasure coded storage pool (required for erasure-coded pool type).
@@ -4136,10 +4478,28 @@ spec:
                             as dataChunks so be aware that the larger the number of data chunks, the higher the cost of recovery.
                           minimum: 0
                           type: integer
+                        stripeUnit:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            Erasure code stripe size in bytes. Ceph default is 4096 bytes (4 KiB).
+                            Value must be a multiple of 4096 (4Ki).
+                          enum:
+                            - 4Ki
+                            - 16Ki
+                            - 64Ki
+                            - 256Ki
+                            - 1Mi
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                       required:
                         - codingChunks
                         - dataChunks
                       type: object
+                      x-kubernetes-validations:
+                        - message: crushNumFailureDomains and crushOSDsPerFailureDomain must be specified together
+                          rule: has(self.crushNumFailureDomains) == has(self.crushOSDsPerFailureDomain)
                     failureDomain:
                       description: 'The failure domain: osd/host/(region or zone if available) - technically also any type in the crush map'
                       type: string
@@ -4304,9 +4664,12 @@ spec:
                             description: |-
                               The data pool used to store ObjectStore data that cannot use erasure coding (ex: multi-part uploads).
                               If dataPoolName is not erasure coded, then there is no need for dataNonECPoolName.
+                              WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                             type: string
                           dataPoolName:
-                            description: The data pool used to store ObjectStore objects data.
+                            description: |-
+                              The data pool used to store ObjectStore objects data.
+                              WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                             minLength: 1
                             type: string
                           default:
@@ -4315,7 +4678,9 @@ spec:
                               Default is false.
                             type: boolean
                           metadataPoolName:
-                            description: The metadata pool used to store ObjectStore bucket index.
+                            description: |-
+                              The metadata pool used to store ObjectStore bucket index.
+                              WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                             minLength: 1
                             type: string
                           name:
@@ -4331,7 +4696,9 @@ spec:
                             items:
                               properties:
                                 dataPoolName:
-                                  description: DataPoolName is the data pool used to store ObjectStore objects data.
+                                  description: |-
+                                    DataPoolName is the data pool used to store ObjectStore objects data.
+                                    WARNING: Do not change this field after creation. Pool names are used in RADOS namespaces and renaming leads to data loss.
                                   minLength: 1
                                   type: string
                                 name:
@@ -4348,6 +4715,7 @@ spec:
                                 - dataPoolName
                                 - name
                               type: object
+                            maxItems: 10
                             type: array
                         required:
                           - dataPoolName
